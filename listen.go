@@ -114,6 +114,7 @@ func (l *Listener) listFd(pid int) {
 			path, _ := store.Load(fd)
 			fmt.Printf("/proc/%d/fd/%d -> %s\n", pid, fd, path)
 		}
+		fmt.Println("----------------")
 	}
 }
 
