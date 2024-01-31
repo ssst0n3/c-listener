@@ -66,7 +66,7 @@ func (l *Listener) Listen(passSelf bool, allows []string, denys []string) {
 			}
 
 			if _, ok := l.Store.Load(int(pid)); !ok {
-				fmt.Printf("[+] Found the PID: %d, %s\n", pid, cmdline)
+				fmt.Printf("[+] Found the PID: %d, %q\n", pid, strings.Split(cmdline, "\x00"))
 			}
 			l.PidList <- int(pid)
 		}
@@ -74,8 +74,8 @@ func (l *Listener) Listen(passSelf bool, allows []string, denys []string) {
 }
 
 func (l *Listener) listFd(pid int) {
-	store := &sync.Map{}
-	l.Store.LoadOrStore(pid, store)
+	v, _ := l.Store.LoadOrStore(pid, &sync.Map{})
+	store := v.(*sync.Map)
 	fds, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", pid))
 	if err != nil {
 		fmt.Printf("open /proc/%d/fd failed\n", pid)
@@ -93,12 +93,12 @@ func (l *Listener) listFd(pid int) {
 		}
 
 		if old, ok := store.Load(fd); !ok {
-			store.Store(pid, path)
+			store.Store(fd, path)
 			changed = true
 		} else {
 			if old != path && path != "?" {
+				store.Store(fd, path)
 				changed = true
-				store.Store(pid, path)
 			}
 		}
 	}
