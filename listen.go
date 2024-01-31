@@ -74,6 +74,10 @@ func (l *Listener) Listen(passSelf bool, allows []string, denys []string) {
 }
 
 func (l *Listener) listFd(pid int) {
+	_, err := os.Lstat(fmt.Sprintf("/proc/%d/", pid))
+	if os.IsNotExist(err) {
+		return
+	}
 	v, _ := l.Store.LoadOrStore(pid, &sync.Map{})
 	store := v.(*sync.Map)
 	fds, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", pid))
