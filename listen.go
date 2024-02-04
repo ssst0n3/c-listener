@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/ctrsploit/sploit-spec/pkg/version"
 	"github.com/urfave/cli/v2"
 	"os"
 	"sort"
@@ -123,8 +124,11 @@ func (l *Listener) listFd(pid int) {
 }
 
 func main() {
-	app := &cli.App{
+	listener := &cli.App{
 		Name: "fd-listener",
+		Commands: []*cli.Command{
+			version.Command,
+		},
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    "allows",
@@ -144,7 +148,7 @@ func main() {
 			}
 		},
 	}
-	err := app.Run(os.Args)
+	err := listener.Run(os.Args)
 	if err != nil {
 		panic(err)
 	}

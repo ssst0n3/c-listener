@@ -1,11 +1,21 @@
 
+## pre-built
+
+see https://github.com/ssst0n3/fd-listener/releases
+
+## usage
+
 ```
 ./listen -a allow_cmd1 [-a allow_cmd2] -d deny_cmd1 [-d deny_cmd2]
 ```
 
+e.g. 
+
 ```
 ./listen -a runc -a init -d root
 ```
+
+## detect CVE-2024-21626
 
 can be used to detect CVE-2024-21626 
 
@@ -13,6 +23,8 @@ terminal1
 ```
 $ ./listen -a runc -a init -d bundle
 ```
+
+> for older versions runc, use `./listen -a /proc/self/exe -a init -d bundle`
 
 terminal2
 ```
