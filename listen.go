@@ -101,7 +101,7 @@ func (l *Listener) listFd(pid int) {
 			store.Store(fd, path)
 			changed = true
 		} else {
-			if old != path && path != "?" {
+			if old != path {
 				store.Store(fd, path)
 				changed = true
 			}
