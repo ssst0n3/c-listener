@@ -3,24 +3,28 @@ package main
 import (
 	"fmt"
 	"github.com/ctrsploit/sploit-spec/pkg/version"
+	"github.com/fatih/color"
 	"github.com/urfave/cli/v2"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 type Listener struct {
 	self    string
 	PidList chan int
 	Store   sync.Map
+	Fd      chan [2]string
 }
 
 func New() *Listener {
 	return &Listener{
 		self:    os.Args[0],
 		PidList: make(chan int, 10),
+		Fd:      make(chan [2]string, 10),
 	}
 }
 
@@ -92,17 +96,19 @@ func (l *Listener) listFd(pid int) {
 		if err != nil {
 			continue
 		}
-		path, _ := os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", pid, fd))
-		if path == "" {
-			path = "?"
+		fdPath := fmt.Sprintf("/proc/%d/fd/%d", pid, fd)
+		realPath, _ := os.Readlink(fdPath)
+		if realPath == "" {
+			realPath = "?"
 		}
-
 		if old, ok := store.Load(fd); !ok {
-			store.Store(fd, path)
+			store.Store(fd, realPath)
+			l.Fd <- [2]string{fdPath, realPath}
 			changed = true
 		} else {
-			if old != path {
-				store.Store(fd, path)
+			if old != realPath {
+				store.Store(fd, realPath)
+				l.Fd <- [2]string{fdPath, realPath}
 				changed = true
 			}
 		}
@@ -120,6 +126,27 @@ func (l *Listener) listFd(pid int) {
 			fmt.Printf("/proc/%d/fd/%d -> %s\n", pid, fd, path)
 		}
 		fmt.Println("----------------")
+	}
+}
+
+func (l *Listener) Detect() {
+	for {
+		paths := <-l.Fd
+		fdPath, realPath := paths[0], paths[1]
+
+		fdFI, err := os.Stat(fdPath)
+		if err != nil {
+			continue
+		}
+		fdStat, _ := fdFI.Sys().(*syscall.Stat_t)
+		realFI, err := os.Stat(realPath)
+		if err != nil {
+			continue
+		}
+		realStat, _ := realFI.Sys().(*syscall.Stat_t)
+		if fdStat.Ino == realStat.Ino {
+			color.Red(fmt.Sprintf("[!] leaked path: %s -> %s\n", fdPath, realPath))
+		}
 	}
 }
 
@@ -142,6 +169,7 @@ func main() {
 		Action: func(context *cli.Context) error {
 			l := New()
 			go l.Listen(true, context.StringSlice("allows"), context.StringSlice("denys"))
+			go l.Detect()
 			for {
 				pid := <-l.PidList
 				l.listFd(pid)
