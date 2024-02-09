@@ -54,10 +54,6 @@ func (l *Listener) Listen(passSelf bool, allows []string, denys []string) {
 				continue
 			}
 
-			//exe, err := filepath.EvalSymlinks(fmt.Sprintf("/proc/%d/exe", pid))
-			//if err != nil {
-			//	continue
-			//}
 			content, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
 			if err != nil {
 				continue
@@ -101,14 +97,15 @@ func (l *Listener) listFd(pid int) {
 		if realPath == "" {
 			realPath = "?"
 		}
+
 		if old, ok := store.Load(fd); !ok {
 			store.Store(fd, realPath)
-			l.Fd <- [2]string{fdPath, realPath}
+			//l.Fd <- [2]string{fdPath, realPath}
 			changed = true
 		} else {
 			if old != realPath {
 				store.Store(fd, realPath)
-				l.Fd <- [2]string{fdPath, realPath}
+				//l.Fd <- [2]string{fdPath, realPath}
 				changed = true
 			}
 		}
@@ -122,11 +119,33 @@ func (l *Listener) listFd(pid int) {
 		})
 		sort.Ints(keys)
 		for _, fd := range keys {
-			path, _ := store.Load(fd)
-			fmt.Printf("/proc/%d/fd/%d -> %s\n", pid, fd, path)
+			fdPath := fmt.Sprintf("/proc/%d/fd/%d", pid, fd)
+			realPath, _ := store.Load(fd)
+			if detect(fdPath, realPath.(string)) {
+				color.Red(fmt.Sprintf("%s -> %s\t; leaked!\n", fdPath, realPath))
+			} else {
+				fmt.Printf("%s -> %s\n", fdPath, realPath)
+			}
 		}
 		fmt.Println("----------------")
 	}
+}
+
+func detect(fdPath, realPath string) (leaked bool) {
+	fdFI, err := os.Stat(fdPath)
+	if err != nil {
+		return
+	}
+	fdStat, _ := fdFI.Sys().(*syscall.Stat_t)
+	realFI, err := os.Stat(realPath)
+	if err != nil {
+		return
+	}
+	realStat, _ := realFI.Sys().(*syscall.Stat_t)
+	if fdStat.Ino == realStat.Ino {
+		leaked = true
+	}
+	return
 }
 
 func (l *Listener) Detect() {
@@ -134,17 +153,7 @@ func (l *Listener) Detect() {
 		paths := <-l.Fd
 		fdPath, realPath := paths[0], paths[1]
 
-		fdFI, err := os.Stat(fdPath)
-		if err != nil {
-			continue
-		}
-		fdStat, _ := fdFI.Sys().(*syscall.Stat_t)
-		realFI, err := os.Stat(realPath)
-		if err != nil {
-			continue
-		}
-		realStat, _ := realFI.Sys().(*syscall.Stat_t)
-		if fdStat.Ino == realStat.Ino {
+		if detect(fdPath, realPath) {
 			color.Red(fmt.Sprintf("[!] leaked path: %s -> %s\n", fdPath, realPath))
 		}
 	}
