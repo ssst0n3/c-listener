@@ -81,6 +81,7 @@ func (l *Listener) listFd(pid int) {
 	}
 	v, _ := l.Store.LoadOrStore(pid, &sync.Map{})
 	store := v.(*sync.Map)
+	leaked := map[int]bool{}
 	fds, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", pid))
 	if err != nil {
 		fmt.Printf("open /proc/%d/fd failed\n", pid)
@@ -96,6 +97,10 @@ func (l *Listener) listFd(pid int) {
 		realPath, _ := os.Readlink(fdPath)
 		if realPath == "" {
 			realPath = "?"
+		}
+
+		if detect(fdPath, realPath) {
+			leaked[fd] = true
 		}
 
 		if old, ok := store.Load(fd); !ok {
@@ -121,7 +126,7 @@ func (l *Listener) listFd(pid int) {
 		for _, fd := range keys {
 			fdPath := fmt.Sprintf("/proc/%d/fd/%d", pid, fd)
 			realPath, _ := store.Load(fd)
-			if detect(fdPath, realPath.(string)) {
+			if _, ok := leaked[fd]; ok {
 				color.Red(fmt.Sprintf("%s -> %s\t; leaked!\n", fdPath, realPath))
 			} else {
 				fmt.Printf("%s -> %s\n", fdPath, realPath)
