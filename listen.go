@@ -1,10 +1,8 @@
-package main
+package listener
 
 import (
 	"fmt"
-	"github.com/ctrsploit/sploit-spec/pkg/version"
 	"github.com/fatih/color"
-	"github.com/urfave/cli/v2"
 	"os"
 	"sort"
 	"strconv"
@@ -74,7 +72,7 @@ func (l *Listener) Listen(passSelf bool, allows []string, denys []string) {
 	}
 }
 
-func (l *Listener) listFd(pid int) {
+func (l *Listener) ListFd(pid int) {
 	_, err := os.Lstat(fmt.Sprintf("/proc/%d/", pid))
 	if os.IsNotExist(err) {
 		return
@@ -161,37 +159,5 @@ func (l *Listener) Detect() {
 		if detect(fdPath, realPath) {
 			color.Red(fmt.Sprintf("[!] leaked path: %s -> %s\n", fdPath, realPath))
 		}
-	}
-}
-
-func main() {
-	listener := &cli.App{
-		Name: "fd-listener",
-		Commands: []*cli.Command{
-			version.Command,
-		},
-		Flags: []cli.Flag{
-			&cli.StringSliceFlag{
-				Name:    "allows",
-				Aliases: []string{"a"},
-			},
-			&cli.StringSliceFlag{
-				Name:    "denys",
-				Aliases: []string{"d"},
-			},
-		},
-		Action: func(context *cli.Context) error {
-			l := New()
-			go l.Listen(true, context.StringSlice("allows"), context.StringSlice("denys"))
-			go l.Detect()
-			for {
-				pid := <-l.PidList
-				l.listFd(pid)
-			}
-		},
-	}
-	err := listener.Run(os.Args)
-	if err != nil {
-		panic(err)
 	}
 }
