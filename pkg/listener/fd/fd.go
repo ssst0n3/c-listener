@@ -7,10 +7,11 @@ import (
 )
 
 type Stat struct {
-	FdPath   string
-	RealPath string
-	Leak     bool
-	Flags    int64
+	FdPath     string
+	RealPath   string
+	SocketPath string
+	Leak       bool
+	Flags      int64
 }
 
 func (s Stat) String() (content string) {
@@ -19,7 +20,11 @@ func (s Stat) String() (content string) {
 		leaked = "leaked!"
 	}
 	flags := pkg.ParseFlags(s.Flags)
-	content = fmt.Sprintf("%s -> %s\t; %s\t%s", s.FdPath, s.RealPath, leaked, flags)
+	var socketPath string
+	if s.SocketPath != "" {
+		socketPath = " -> " + s.SocketPath
+	}
+	content = fmt.Sprintf("%s -> %s%s\t; %s\t%s", s.FdPath, s.RealPath, socketPath, leaked, flags)
 	if s.Leak {
 		content = color.RedString(content)
 	}

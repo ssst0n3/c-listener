@@ -24,7 +24,10 @@ func (l *Listener) Handle() {
 			l.workers[e.Pid] = NewWorker(e.Pid)
 		case event.ProcessExit:
 			worker := l.workers[e.Pid]
-			worker.Stop <- true
+			if worker != nil {
+				worker.Stop <- true
+				delete(l.workers, e.Pid)
+			}
 		default:
 			panic("unhandled default case")
 		}

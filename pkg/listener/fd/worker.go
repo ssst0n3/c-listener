@@ -45,20 +45,21 @@ func (l *Worker) stat(fd int) (stat Stat, err error) {
 		FdPath:   fdPath,
 		RealPath: realPath,
 	}
+	socketPath, err := Socket(l.pid, realPath)
+	if err != nil {
+		return
+	}
+	stat.SocketPath = socketPath
 	leak, err := Leak(fdPath, realPath)
 	if err != nil {
 		return
 	}
+	stat.Leak = leak
 	flags, err := pkg.ReadFlags(fmt.Sprintf("/proc/%d/fdinfo/%d", l.pid, fd))
 	if err != nil {
 		return
 	}
-	stat = Stat{
-		FdPath:   fdPath,
-		RealPath: realPath,
-		Leak:     leak,
-		Flags:    flags,
-	}
+	stat.Flags = flags
 	return
 }
 

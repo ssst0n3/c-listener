@@ -84,7 +84,8 @@ func (l *Listener) filter(pid int) (valid bool, err error) {
 	if err != nil {
 		return false, l.handleError(pid, err)
 	}
-	cmdline := string(content)
+	raw := string(content)
+	cmdline := strings.Join(strings.Split(raw, "\x00"), " ")
 	for _, target := range l.allow {
 		if !strings.Contains(cmdline, target) {
 			return
@@ -96,7 +97,7 @@ func (l *Listener) filter(pid int) (valid bool, err error) {
 		}
 	}
 	valid = true
-	color.Green("[+] new process: %d, %q", pid, strings.Split(cmdline, "\x00"))
+	color.Green("[+] new process: %d, %s", pid, cmdline)
 	return
 }
 
