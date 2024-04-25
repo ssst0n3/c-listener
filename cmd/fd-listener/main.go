@@ -23,6 +23,10 @@ func main() {
 				Name:    "deny",
 				Aliases: []string{"d"},
 			},
+			&cli.BoolFlag{
+				Name:    "task",
+				Aliases: []string{"t"},
+			},
 		},
 		Action: func(context *cli.Context) error {
 			allow := context.StringSlice("allow")

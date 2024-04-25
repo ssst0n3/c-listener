@@ -59,35 +59,26 @@ func (l *Listener) exit(pid int) {
 	}
 }
 
-func (l *Listener) handleError(pid int, err error) error {
-	if os.IsNotExist(err) || strings.Contains(err.Error(), "no such process") {
-		l.exit(pid)
-		return nil
-	} else {
-		awesome_error.CheckErr(err)
-		return err
-	}
+func NotAlive(err error) bool {
+	return os.IsNotExist(err) || strings.Contains(err.Error(), "no such process")
 }
 
 func (l *Listener) filter(pid int) (valid bool, err error) {
 	if _, ok := l.known.Load(pid); ok {
 		return
 	}
-	{
-		// make sure process exists
-		_, err = os.Stat(fmt.Sprintf("/proc/%d", pid))
-		if err != nil {
-			return false, l.handleError(pid, err)
-		}
-	}
+	// make sure process exists
 	content, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
 	if err != nil {
-		return false, l.handleError(pid, err)
+		if !NotAlive(err) {
+			awesome_error.CheckErr(err)
+		}
+		return
 	}
 	raw := string(content)
 	cmdline := strings.Join(strings.Split(raw, "\x00"), " ")
-	for _, target := range l.allow {
-		if !strings.Contains(cmdline, target) {
+	for _, allow := range l.allow {
+		if !strings.Contains(cmdline, allow) {
 			return
 		}
 	}
@@ -109,7 +100,7 @@ func (l *Listener) New() {
 			return
 		}
 		for pid := lastPid; pid < lastPid+l.stepLength; pid++ {
-			valid, err := l.filter(lastPid)
+			valid, err := l.filter(pid)
 			if err != nil {
 				continue
 			}
@@ -121,7 +112,7 @@ func (l *Listener) New() {
 				}
 			}
 		}
-		time.Sleep(10 * time.Microsecond)
+		//time.Sleep(10 * time.Microsecond)
 	}
 }
 
@@ -135,7 +126,11 @@ func (l *Listener) Exit() {
 			}
 			_, err := os.Stat(fmt.Sprintf("/proc/%d", pid))
 			if err != nil {
-				_ = l.handleError(pid, err)
+				if NotAlive(err) {
+					l.exit(pid)
+				} else {
+					awesome_error.CheckErr(err)
+				}
 			}
 			return true
 		})
