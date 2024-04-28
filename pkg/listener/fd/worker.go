@@ -13,6 +13,7 @@ type Worker struct {
 	pid   int
 	Stop  chan bool
 	store sync.Map
+	max   int
 }
 
 func NewWorker(pid int) (w *Worker) {
@@ -68,17 +69,41 @@ func (l *Worker) do() {
 	if os.IsNotExist(err) {
 		return
 	}
-	fds, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", l.pid))
+	entries, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", l.pid))
 	if err != nil {
 		fmt.Printf("open /proc/%d/fd failed\n", l.pid)
 		return
 	}
-	changed := false
-	for _, name := range fds {
-		fd, err := strconv.Atoi(name.Name())
+	var fds []int
+	for _, fd := range entries {
+		fd, err := strconv.Atoi(fd.Name())
 		if err != nil {
 			continue
 		}
+		fds = append(fds, fd)
+	}
+	sort.Ints(fds)
+
+	var changed bool
+
+	// clear empty fd
+	if len(fds) > 0 {
+		for i := fds[len(fds)-1] + 1; i < l.max; i++ {
+			if _, ok := l.store.LoadAndDelete(i); ok {
+				changed = true
+			}
+		}
+		l.max = fds[len(fds)-1]
+	}
+
+	var last int
+	for _, fd := range fds {
+		for i := last + 1; i < fd; i++ {
+			if _, ok := l.store.LoadAndDelete(i); ok {
+				changed = true
+			}
+		}
+		last = fd
 		stat, _ := l.stat(fd)
 		if old, ok := l.store.Load(fd); !ok {
 			l.store.Store(fd, stat)

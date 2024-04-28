@@ -22,16 +22,18 @@ type Listener struct {
 	stepLength int
 	self       string
 	known      sync.Map // PID -> Alive
+	thread     bool
 	Event      chan event.Event
 }
 
-func New(allow, deny []string, exceptSelf bool, stepLength int) (l *Listener) {
+func New(allow, deny []string, exceptSelf, thread bool, stepLength int) (l *Listener) {
 	l = &Listener{
 		allow:      allow,
 		deny:       deny,
 		stepLength: DefaultStepLength,
 		self:       os.Args[0],
 		known:      sync.Map{},
+		thread:     thread,
 		Event:      make(chan event.Event),
 	}
 	if exceptSelf {
@@ -93,6 +95,16 @@ func (l *Listener) filter(pid int) (valid bool, err error) {
 }
 
 func (l *Listener) New() {
+	for {
+		if l.thread {
+			l.task()
+		} else {
+			l.process()
+		}
+	}
+}
+
+func (l *Listener) New_() {
 	for {
 		// only search new started process
 		lastPid, err := util.LastPid()

@@ -31,7 +31,8 @@ func main() {
 		Action: func(context *cli.Context) error {
 			allow := context.StringSlice("allow")
 			deny := context.StringSlice("deny")
-			processListener := process.New(allow, deny, true, 0)
+			task := context.Bool("task")
+			processListener := process.New(allow, deny, true, task, 0)
 			fdListener := fd.New(processListener.Event)
 			processListener.Listen()
 			fdListener.Handle()
