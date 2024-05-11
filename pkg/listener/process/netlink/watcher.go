@@ -9,14 +9,16 @@ import (
 type Watcher struct {
 	thread bool
 	done   chan struct{}
-	event  chan netlink.ProcEvent
+	start  chan int
+	exit   chan int
 }
 
 func New(thread bool) *Watcher {
 	return &Watcher{
 		thread: thread,
 		done:   make(chan struct{}),
-		event:  make(chan netlink.ProcEvent),
+		start:  make(chan int),
+		exit:   make(chan int),
 	}
 }
 
@@ -30,11 +32,35 @@ func (w Watcher) init(event chan netlink.ProcEvent, done chan struct{}) (err err
 		awesome_error.CheckErr(err)
 		return
 	}
+	go func() {
+		for {
+			err := <-errChan
+			if err != nil {
+				//awesome_error.CheckErr(err)
+			}
+		}
+	}()
 	return
 }
 
 func (w Watcher) Init() (err error) {
-	return w.init(w.event, w.done)
+	event := make(chan netlink.ProcEvent)
+	err = w.init(event, w.done)
+	if err != nil {
+		return
+	}
+	go func() {
+		for {
+			e := <-event
+			switch msg := e.Msg.(type) {
+			case *netlink.ExecProcEvent:
+				w.start <- int(msg.Tgid())
+			case *netlink.ExitProcEvent:
+				w.exit <- int(msg.Pid())
+			}
+		}
+	}()
+	return
 }
 
 func (w Watcher) Enable() (enabled bool) {
@@ -54,28 +80,12 @@ func (w Watcher) Enable() (enabled bool) {
 
 func (w Watcher) Start(c chan int) (err error) {
 	for {
-		e := <-w.event
-		switch msg := e.Msg.(type) {
-		case *netlink.ForkProcEvent:
-			if w.thread {
-				c <- int(msg.ChildPid)
-			}
-		case *netlink.ExecProcEvent:
-			if !w.thread {
-				c <- int(msg.Pid())
-			}
-		}
+		c <- <-w.start
 	}
 }
 
 func (w Watcher) Exit(c chan int) (err error) {
 	for {
-		e := <-w.event
-		switch msg := e.Msg.(type) {
-		case *netlink.ExitProcEvent:
-			if !w.thread {
-				c <- int(msg.Pid())
-			}
-		}
+		c <- <-w.exit
 	}
 }

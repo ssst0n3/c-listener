@@ -108,13 +108,17 @@ func (l *Listener) Start() {
 func (l *Listener) Exit() {
 	for {
 		pid := <-l.exit
-		old, loaded := l.known.LoadOrStore(pid, false)
-		if loaded && old.(bool) {
-			//color.Green("[+] stop on: %d, %v", pid, old)
+		alive, loaded := l.known.Load(pid)
+		if loaded {
+			color.Green("[*] pid %d stop", pid)
+		}
+
+		if loaded && alive.(bool) {
 			l.Event <- event.Event{
 				Type: event.ProcessExit,
 				Pid:  pid,
 			}
+			l.known.Store(pid, false)
 		}
 	}
 }

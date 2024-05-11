@@ -2,6 +2,7 @@ package fd
 
 import (
 	"github.com/ssst0n3/fd-listener/pkg/event"
+	"runtime/debug"
 )
 
 type Listener struct {
@@ -27,6 +28,7 @@ func (l *Listener) Handle() {
 			if worker != nil {
 				worker.Stop <- true
 				delete(l.workers, e.Pid)
+				debug.FreeOSMemory()
 			}
 		default:
 			panic("unhandled default case")
