@@ -15,12 +15,23 @@ func New(pid int) *Watcher {
 }
 
 func (w Watcher) Init() {
-	// register
+	w.register()
 	// receive IPC message
+	go w.receive()
 }
 
 func (w Watcher) Enable() (enabled bool) {
 	return
+}
+
+func (w Watcher) register() {
+	// register with os.GetPid()
+}
+
+func (w Watcher) receive() {
+	for {
+		w.msg <- Message{}
+	}
 }
 
 func (w Watcher) Watch(stop <-chan struct{}, event chan<- event.Events) {
