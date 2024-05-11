@@ -21,3 +21,7 @@ func LastPid() (lastPid int, err error) {
 	lastPid = int(pid)
 	return
 }
+
+func NotAlive(err error) bool {
+	return os.IsNotExist(err) || strings.Contains(err.Error(), "no such process")
+}

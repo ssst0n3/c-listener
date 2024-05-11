@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 const (
@@ -24,6 +23,9 @@ type Listener struct {
 	known      sync.Map // PID -> Alive
 	thread     bool
 	Event      chan event.Event
+	watcher    Watcher
+	start      chan int
+	exit       chan int
 }
 
 func New(allow, deny []string, exceptSelf, thread bool, stepLength int) (l *Listener) {
@@ -35,6 +37,8 @@ func New(allow, deny []string, exceptSelf, thread bool, stepLength int) (l *List
 		known:      sync.Map{},
 		thread:     thread,
 		Event:      make(chan event.Event),
+		start:      make(chan int),
+		exit:       make(chan int),
 	}
 	if exceptSelf {
 		l.deny = append(l.deny, l.self)
@@ -42,27 +46,17 @@ func New(allow, deny []string, exceptSelf, thread bool, stepLength int) (l *List
 	if stepLength > 0 {
 		l.stepLength = stepLength
 	}
+	l.watcher = NewWatcher(l.thread, l.stepLength, &l.known)
 	return
 }
 
 func (l *Listener) Listen() {
-	go l.New()
-	go l.Exit()
-}
-
-func (l *Listener) exit(pid int) {
-	old, loaded := l.known.LoadOrStore(pid, false)
-	if loaded && old.(bool) {
-		//color.Green("[+] stop on: %d, %v", pid, old)
-		l.Event <- event.Event{
-			Type: event.ProcessExit,
-			Pid:  pid,
-		}
+	err := Watch(l.watcher, l.start, l.exit)
+	if err != nil {
+		return
 	}
-}
-
-func NotAlive(err error) bool {
-	return os.IsNotExist(err) || strings.Contains(err.Error(), "no such process")
+	go l.Start()
+	go l.Exit()
 }
 
 func (l *Listener) filter(pid int) (valid bool, err error) {
@@ -72,7 +66,7 @@ func (l *Listener) filter(pid int) (valid bool, err error) {
 	// make sure process exists
 	content, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
 	if err != nil {
-		if !NotAlive(err) {
+		if !util.NotAlive(err) {
 			awesome_error.CheckErr(err)
 		}
 		return
@@ -94,58 +88,33 @@ func (l *Listener) filter(pid int) (valid bool, err error) {
 	return
 }
 
-func (l *Listener) New() {
+func (l *Listener) Start() {
 	for {
-		if l.thread {
-			l.task()
-		} else {
-			l.process()
-		}
-	}
-}
-
-func (l *Listener) New_() {
-	for {
-		// only search new started process
-		lastPid, err := util.LastPid()
+		pid := <-l.start
+		valid, err := l.filter(pid)
 		if err != nil {
-			return
+			continue
 		}
-		for pid := lastPid; pid < lastPid+l.stepLength; pid++ {
-			valid, err := l.filter(pid)
-			if err != nil {
-				continue
-			}
-			if valid {
-				l.known.Store(pid, true)
-				l.Event <- event.Event{
-					Type: event.ProcessNew,
-					Pid:  pid,
-				}
+		if valid {
+			l.known.Store(pid, true)
+			l.Event <- event.Event{
+				Type: event.ProcessNew,
+				Pid:  pid,
 			}
 		}
-		//time.Sleep(10 * time.Microsecond)
 	}
 }
 
 func (l *Listener) Exit() {
 	for {
-		l.known.Range(func(k, v interface{}) bool {
-			pid := k.(int)
-			alive := v.(bool)
-			if !alive {
-				return true
+		pid := <-l.exit
+		old, loaded := l.known.LoadOrStore(pid, false)
+		if loaded && old.(bool) {
+			//color.Green("[+] stop on: %d, %v", pid, old)
+			l.Event <- event.Event{
+				Type: event.ProcessExit,
+				Pid:  pid,
 			}
-			_, err := os.Stat(fmt.Sprintf("/proc/%d", pid))
-			if err != nil {
-				if NotAlive(err) {
-					l.exit(pid)
-				} else {
-					awesome_error.CheckErr(err)
-				}
-			}
-			return true
-		})
-		time.Sleep(1 * time.Second)
+		}
 	}
 }
