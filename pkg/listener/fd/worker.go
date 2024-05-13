@@ -2,135 +2,89 @@ package fd
 
 import (
 	"fmt"
-	"github.com/ssst0n3/fd-listener/pkg"
-	"os"
+	"github.com/ssst0n3/fd-listener/pkg/listener/fd/event"
+	"github.com/ssst0n3/fd-listener/pkg/listener/fd/stat"
 	"sort"
-	"strconv"
 	"sync"
 )
 
 type Worker struct {
-	pid   int
-	Stop  chan bool
-	store sync.Map
-	max   int
+	pid     int
+	stop    chan struct{}
+	store   sync.Map
+	max     int
+	watcher Watcher
+	event   chan event.Events
 }
 
 func NewWorker(pid int) (w *Worker) {
 	w = &Worker{
-		pid:  pid,
-		Stop: make(chan bool),
+		pid:   pid,
+		stop:  make(chan struct{}),
+		event: make(chan event.Events),
 	}
+	w.watcher = NewWatcher(pid)
 	go w.Work()
 	return
 }
 
-func (l *Worker) Work() {
+func (w *Worker) Work() {
+	go w.watcher.Watch(w.event)
 	for {
 		select {
-		case <-l.Stop:
+		case <-w.stop:
+			w.watcher.Close()
 			return
+		case e := <-w.event:
+			w.do(e)
+		}
+	}
+}
+
+func (w *Worker) Close() {
+	w.stop <- struct{}{}
+}
+
+func (w *Worker) do(events event.Events) {
+	if len(events) == 0 {
+		return
+	}
+	var changed []*stat.Stat
+	var closed []int
+	for _, e := range events {
+		fmt.Sprintf("%+v\n", e)
+		switch e.Type {
+		case event.Open, event.Change:
+			e.Stat.Change(true)
+			changed = append(changed, e.Stat)
+			w.store.Store(e.Fd, e.Stat)
+		case event.Close:
+			closed = append(closed, e.Fd)
+			w.store.Store(e.Fd, e.Stat)
 		default:
-			l.do()
+			panic("unhandled default case")
 		}
+	}
+	w.print()
+	for _, s := range changed {
+		s.Change(false)
+	}
+	for _, fd := range closed {
+		w.store.Delete(fd)
 	}
 }
 
-func (l *Worker) stat(fd int) (stat Stat, err error) {
-	fdPath := fmt.Sprintf("/proc/%d/fd/%d", l.pid, fd)
-	realPath, _ := os.Readlink(fdPath)
-	if realPath == "" {
-		realPath = "?"
-	}
-	stat = Stat{
-		FdPath:   fdPath,
-		RealPath: realPath,
-	}
-	socketPath, err := Socket(l.pid, realPath)
-	if err != nil {
-		return
-	}
-	stat.SocketPath = socketPath
-	leak, err := Leak(fdPath, realPath)
-	if err != nil {
-		return
-	}
-	stat.Leak = leak
-	flags, err := pkg.ReadFlags(fmt.Sprintf("/proc/%d/fdinfo/%d", l.pid, fd))
-	if err != nil {
-		return
-	}
-	stat.Flags = flags
-	return
-}
-
-func (l *Worker) do() {
-	_, err := os.Lstat(fmt.Sprintf("/proc/%d/", l.pid))
-	if os.IsNotExist(err) {
-		return
-	}
-	entries, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", l.pid))
-	if err != nil {
-		fmt.Printf("open /proc/%d/fd failed\n", l.pid)
-		return
-	}
-	var fds []int
-	for _, fd := range entries {
-		fd, err := strconv.Atoi(fd.Name())
-		if err != nil {
-			continue
-		}
-		fds = append(fds, fd)
-	}
-	sort.Ints(fds)
-
-	var changed bool
-
-	// clear empty fd
-	if len(fds) > 0 {
-		for i := fds[len(fds)-1] + 1; i < l.max; i++ {
-			if _, ok := l.store.LoadAndDelete(i); ok {
-				changed = true
-			}
-		}
-		l.max = fds[len(fds)-1]
-	}
-
-	var last int
-	for _, fd := range fds {
-		for i := last + 1; i < fd; i++ {
-			if _, ok := l.store.LoadAndDelete(i); ok {
-				changed = true
-			}
-		}
-		last = fd
-		stat, _ := l.stat(fd)
-		if old, ok := l.store.Load(fd); !ok {
-			l.store.Store(fd, stat)
-			changed = true
-		} else {
-			if old != stat {
-				l.store.Store(fd, stat)
-				changed = true
-			}
-		}
-	}
-	if changed {
-		l.print()
-	}
-}
-
-func (l *Worker) print() {
+func (w *Worker) print() {
 	var keys []int
-	l.store.Range(func(key any, value any) bool {
+	w.store.Range(func(key any, value any) bool {
 		fd := key.(int)
 		keys = append(keys, fd)
 		return true
 	})
 	sort.Ints(keys)
 	for _, fd := range keys {
-		stat, _ := l.store.Load(fd)
-		fmt.Println(stat)
+		s, _ := w.store.Load(fd)
+		fmt.Println(s)
 	}
 	fmt.Println("----------------")
 }
