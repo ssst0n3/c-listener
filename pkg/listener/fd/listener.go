@@ -25,7 +25,7 @@ func (l *Listener) Handle() {
 		case event.ProcessExit:
 			worker := l.workers[e.Pid]
 			if worker != nil {
-				worker.Stop <- true
+				worker.Close()
 				delete(l.workers, e.Pid)
 			}
 		default:

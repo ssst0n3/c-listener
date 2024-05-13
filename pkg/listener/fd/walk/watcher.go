@@ -11,46 +11,53 @@ import (
 )
 
 type Watcher struct {
-	store   *sync.Map
-	changed bool
-	event   event.Events
-	pid     int
-	max     int
+	pid   int
+	store sync.Map
+	event event.Events
+	max   int
+	stop  chan struct{}
 }
 
-func New(pid int, store *sync.Map) *Watcher {
-	return &Watcher{
+func New(pid int) (w *Watcher) {
+	w = &Watcher{
 		pid:   pid,
-		store: store,
+		store: sync.Map{},
+		event: event.Events{},
+		stop:  make(chan struct{}),
 	}
+	return
 }
 
-func (w Watcher) Enable() (enabled bool) {
+func (w *Watcher) Enable() (enabled bool) {
 	return true
 }
 
-func (w Watcher) Watch(stop <-chan struct{}, event chan<- event.Events) {
+func (w *Watcher) Watch(c chan<- event.Events) {
 	for {
 		select {
-		case <-stop:
+		case <-w.stop:
 			return
 		default:
-			_ = w.do(event)
-			if len(w.event) > 0 {
-				event <- w.event
+			e := event.Events{}
+			_ = w.do(&e)
+			if len(e) > 0 {
+				c <- e
 			}
 		}
 	}
 }
 
-func (w Watcher) do(e chan<- event.Events) (err error) {
-	w.changed = false
+func (w *Watcher) Close() {
+	w.stop <- struct{}{}
+}
+
+func (w *Watcher) do(e *event.Events) (err error) {
 	fds, err := fds(w.pid)
 	if err != nil {
 		return
 	}
-	w.close(fds)
-	w.openOrChange(fds)
+	w.closeFd(fds, e)
+	w.openOrChangeFd(fds, e)
 	return
 }
 
@@ -76,7 +83,10 @@ func fds(pid int) (fds []int, err error) {
 }
 
 // fds has been sorted
-func (w Watcher) close(fds []int) {
+func (w *Watcher) closeFd(fds []int, e *event.Events) {
+	if len(fds) == 0 {
+		return
+	}
 	m := max(w.max, fds[len(fds)-1])
 	var missing []int
 	for i := 0; i < len(fds)-1; i++ {
@@ -89,11 +99,15 @@ func (w Watcher) close(fds []int) {
 	}
 	for _, fd := range missing {
 		if _, ok := w.store.LoadAndDelete(fd); ok {
-			w.changed = true
-			w.event = append(w.event, event.Event{
+			*e = append(*e, event.Event{
 				Type: event.Close,
 				Pid:  w.pid,
 				Fd:   fd,
+				Stat: &stat.Stat{
+					FdPath:   fmt.Sprintf("/proc/%d/fd/%d", w.pid, fd),
+					RealPath: "[FD CLOSED]",
+					Changed:  true,
+				},
 			})
 		}
 	}
@@ -101,19 +115,19 @@ func (w Watcher) close(fds []int) {
 	return
 }
 
-func (w Watcher) openOrChange(fds []int) {
+func (w *Watcher) openOrChangeFd(fds []int, e *event.Events) {
 	for _, fd := range fds {
 		s, _ := stat.New(w.pid, fd)
 		if old, ok := w.store.LoadOrStore(fd, s); !ok {
-			w.event = append(w.event, event.Event{
+			*e = append(*e, event.Event{
 				Type: event.Open,
 				Pid:  w.pid,
 				Fd:   fd,
 				Stat: s,
 			})
 		} else {
-			if old != s {
-				w.event = append(w.event, event.Event{
+			if !old.(*stat.Stat).Equals(s) {
+				*e = append(*e, event.Event{
 					Type: event.Change,
 					Pid:  w.pid,
 					Fd:   fd,

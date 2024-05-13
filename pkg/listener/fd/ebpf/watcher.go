@@ -5,7 +5,8 @@ import (
 )
 
 type Watcher struct {
-	msg chan Message
+	msg  chan Message
+	stop chan struct{}
 }
 
 func New(pid int) *Watcher {
@@ -16,7 +17,6 @@ func New(pid int) *Watcher {
 
 func (w Watcher) Init() {
 	w.register()
-	// receive IPC message
 	go w.receive()
 }
 
@@ -24,23 +24,29 @@ func (w Watcher) Enable() (enabled bool) {
 	return
 }
 
+// register to kernel
 func (w Watcher) register() {
 	// register with os.GetPid()
 }
 
+// receive IPC message
 func (w Watcher) receive() {
 	for {
 		w.msg <- Message{}
 	}
 }
 
-func (w Watcher) Watch(stop <-chan struct{}, event chan<- event.Events) {
+func (w Watcher) Watch(event chan<- event.Events) {
 	select {
-	case <-stop:
+	case <-w.stop:
 		return
 	default:
 		w.do(event)
 	}
+}
+
+func (w Watcher) Close() {
+	w.stop <- struct{}{}
 }
 
 func (w Watcher) do(e chan<- event.Events) {
