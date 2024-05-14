@@ -1,6 +1,7 @@
 package fd
 
 import (
+	"fmt"
 	"github.com/ssst0n3/fd-listener/pkg/event"
 )
 
@@ -18,6 +19,7 @@ func New(event chan event.Event) (l *Listener) {
 
 func (l *Listener) Handle() {
 	for {
+		fmt.Println("workers", len(l.workers))
 		e := <-(l.event)
 		switch e.Type {
 		case event.ProcessNew:

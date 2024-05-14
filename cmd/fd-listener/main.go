@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"github.com/ctrsploit/sploit-spec/pkg/version"
 	"github.com/ssst0n3/fd-listener/pkg/listener/fd"
 	"github.com/ssst0n3/fd-listener/pkg/listener/process"
 	"github.com/urfave/cli/v2"
 	"os"
+	"runtime"
+	"time"
 )
 
 func main() {
@@ -29,6 +32,12 @@ func main() {
 			},
 		},
 		Action: func(context *cli.Context) error {
+			go func() {
+				for {
+					fmt.Println("routine", runtime.NumGoroutine())
+					time.Sleep(5 * time.Second)
+				}
+			}()
 			allow := context.StringSlice("allow")
 			deny := context.StringSlice("deny")
 			task := context.Bool("task")

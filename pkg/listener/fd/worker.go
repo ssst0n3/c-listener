@@ -33,7 +33,6 @@ func (w *Worker) Work() {
 	for {
 		select {
 		case <-w.stop:
-			w.watcher.Close()
 			return
 		case e := <-w.event:
 			w.do(e)
@@ -41,7 +40,10 @@ func (w *Worker) Work() {
 	}
 }
 
+// Close and wait watcher close
 func (w *Worker) Close() {
+	// wait watcher closed first to prevent w.event block
+	w.watcher.Close()
 	w.stop <- struct{}{}
 }
 
