@@ -14,7 +14,8 @@ DEBUG_FLGAS ?= $(if $(DEBUG),$(PROGRESS_PLAIN),)
 GITCOMMIT := $(shell git rev-parse --short HEAD || echo unsupported)
 VERSION := $(shell cat ./VERSION)
 BUILDTIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS := "${LDFALGS} \
+SLIM_LDFLAGS ?= -s -w
+LDFLAGS := "$(SLIM_LDFLAGS) \
 	-X github.com/ctrsploit/sploit-spec/pkg/version.Version=${VERSION} \
 	-X github.com/ctrsploit/sploit-spec/pkg/version.GitCommit=${GITCOMMIT} \
 	-X github.com/ctrsploit/sploit-spec/pkg/version.BuildTime=${BUILDTIME}"
@@ -28,10 +29,11 @@ DOCKERFILE := Dockerfile_dev
 
 BUILD_APT_MIRROR := $(if $(APT_MIRROR),--build-arg APT_MIRROR=$(APT_MIRROR))
 BUILD_GO_PROXY := $(if $(GOPROXY),--build-arg GOPROXY=$(GOPROXY))
-BUILD_OPTS := ${BUILD_APT_MIRROR} ${BUILD_GO_PROXY} ${DOCKER_BUILD_ARGS} ${DOCKER_BUILD_OPTS} -f "$(DOCKERFILE)"
+BUILD_SLIM_LDFLAGS := $(if $(SLIM_LDFLAGS), --build-arg SLIM_LDFLAGS="$(SLIM_LDFLAGS)")
+BUILD_OPTS := ${BUILD_APT_MIRROR} ${BUILD_GO_PROXY} ${BUILD_SLIM_LDFLAGS} ${DOCKER_BUILD_ARGS} ${DOCKER_BUILD_OPTS} -f "$(DOCKERFILE)"
 
 binary: bundle
-	APT_MIRROR=$(APT_MIRROR) GOPROXY=$(GOPROXY) docker buildx bake binary ${DEBUG_FLGAS}
+	APT_MIRROR=$(APT_MIRROR) GOPROXY=$(GOPROXY) SLIM_LDFLAGS="$(SLIM_LDFLAGS)" docker buildx bake binary ${DEBUG_FLGAS}
 
 bundle:
 	mkdir -p bin/release
