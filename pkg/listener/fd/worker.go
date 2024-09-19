@@ -54,7 +54,6 @@ func (w *Worker) do(events event.Events) {
 	var changed []*stat.Stat
 	var closed []int
 	for _, e := range events {
-		fmt.Sprintf("%+v\n", e)
 		switch e.Type {
 		case event.Open, event.Change:
 			e.Stat.Change(true)

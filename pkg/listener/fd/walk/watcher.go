@@ -2,12 +2,15 @@ package walk
 
 import (
 	"fmt"
+	"github.com/ssst0n3/awesome_libs/awesome_error"
 	"github.com/ssst0n3/fd-listener/pkg/listener/fd/event"
 	"github.com/ssst0n3/fd-listener/pkg/listener/fd/stat"
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 type Watcher struct {
@@ -33,6 +36,7 @@ func (w *Watcher) Enable() (enabled bool) {
 }
 
 func (w *Watcher) Watch(c chan<- event.Events) {
+	go w.mmwatch()
 	for {
 		select {
 		case <-w.stop:
@@ -49,6 +53,36 @@ func (w *Watcher) Watch(c chan<- event.Events) {
 
 func (w *Watcher) Close() {
 	w.stop <- struct{}{}
+}
+
+func (w *Watcher) mmwatch() {
+	_, err := os.Lstat("/proc/mmwatch")
+	if err != nil {
+		return
+	}
+	var last string
+	for {
+		err := os.WriteFile("/proc/mmwatch", []byte(fmt.Sprintf("%d", w.pid)), 0666)
+		if err != nil {
+			awesome_error.CheckErr(err)
+			return
+		}
+		content, err := os.ReadFile("/proc/mmwatch")
+		if err != nil {
+			awesome_error.CheckErr(err)
+			return
+		}
+		if last == string(content) {
+			continue
+		}
+		last = string(content)
+		if strings.Contains(string(content), "Process not found") {
+			return
+		} else {
+			fmt.Print(string(content))
+		}
+		time.Sleep(1 * time.Millisecond)
+	}
 }
 
 func (w *Watcher) do(e *event.Events) (err error) {

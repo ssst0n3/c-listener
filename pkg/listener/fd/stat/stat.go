@@ -63,6 +63,7 @@ func (s *Stat) String() (content string) {
 		socketPath = " -> " + s.SocketPath
 	}
 	content = fmt.Sprintf("%s -> %s%s\t; %s\t%s", fdPath, s.RealPath, socketPath, leaked, flags)
+	//content = fmt.Sprintf("%-30s -> %-30s%-15s; %-10s %s", fdPath, s.RealPath, socketPath, leaked, flags)
 	return
 }
 

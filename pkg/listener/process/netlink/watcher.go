@@ -55,6 +55,10 @@ func (w Watcher) Init() (err error) {
 			switch msg := e.Msg.(type) {
 			case *netlink.ExecProcEvent:
 				w.start <- int(msg.Tgid())
+			case *netlink.ForkProcEvent:
+				//fmt.Println("fork process")
+				//spew.Dump(msg)
+				w.start <- int(msg.ChildTgid)
 			case *netlink.ExitProcEvent:
 				w.exit <- int(msg.Pid())
 			}
